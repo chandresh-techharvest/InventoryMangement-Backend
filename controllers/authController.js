@@ -1,0 +1,165 @@
+const User = require('../models/User');
+const Tenant = require('../models/Tenant');
+const { generateToken } = require('../config/jwtUtils');
+const crypto = require('crypto');
+
+const registerTenant = async (req, res, next) => {
+    try {
+        const { businessName, fullName, email, password } = req.body;
+
+        const existingUser = await User.findOne({ email });
+        if (existingUser) {
+            return res.status(400).json({
+                success: false,
+                error: 'Email already registered'
+            });
+        }
+
+        const subdomain = `${businessName.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${crypto.randomBytes(3).toString('hex')}`;
+
+        const tenant = await Tenant.create({
+            businessName,
+            subdomain
+        });
+
+        const user = await User.create({
+            tenantId: tenant._id,
+            email,
+            password,
+            fullName,
+            role: 'owner'
+        });
+
+        const token = generateToken({
+            userId: user._id,
+            tenantId: tenant._id,
+            role: user.role
+        });
+
+        // Set httpOnly cookie
+        res.cookie('token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+        });
+
+        res.status(201).json({
+            success: true,
+            user: {
+                id: user._id,
+                email: user.email,
+                fullName: user.fullName,
+                role: user.role
+            },
+            tenant: {
+                id: tenant._id,
+                businessName: tenant.businessName,
+                subdomain: tenant.subdomain
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const login = async (req, res, next) => {
+    try {
+        const { email, password } = req.body;
+
+        const user = await User.findOne({ email }).select('+password');
+
+        if (!user) {
+            return res.status(401).json({
+                success: false,
+                error: 'Invalid credentials'
+            });
+        }
+
+        const isMatch = await user.comparePassword(password);
+
+        if (!isMatch) {
+            return res.status(401).json({
+                success: false,
+                error: 'Invalid credentials'
+            });
+        }
+
+        const tenant = await Tenant.findById(user.tenantId);
+
+        if (!tenant || !tenant.isActive) {
+            return res.status(403).json({
+                success: false,
+                error: 'Tenant account is inactive'
+            });
+        }
+
+        const token = generateToken({
+            userId: user._id,
+            tenantId: user.tenantId,
+            role: user.role
+        });
+
+        // Set httpOnly cookie
+        res.cookie('token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+        });
+
+        res.json({
+            success: true,
+            user: {
+                id: user._id,
+                email: user.email,
+                fullName: user.fullName,
+                role: user.role
+            },
+            tenant: {
+                id: tenant._id,
+                businessName: tenant.businessName,
+                subdomain: tenant.subdomain
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const getMe = async (req, res, next) => {
+    try {
+        const user = await User.findById(req.userId).populate('tenantId');
+
+        res.json({
+            success: true,
+            user: {
+                id: user._id,
+                email: user.email,
+                fullName: user.fullName,
+                role: user.role
+            },
+            tenant: {
+                id: user.tenantId._id,
+                businessName: user.tenantId.businessName,
+                subdomain: user.tenantId.subdomain
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const logout = (req, res) => {
+    res.cookie('token', '', {
+        httpOnly: true,
+        expires: new Date(0)
+    });
+
+    res.json({
+        success: true,
+        message: 'Logged out successfully'
+    });
+};
+
+module.exports = { registerTenant, login, getMe, logout };
