@@ -3,7 +3,19 @@ const Tenant = require('../models/Tenant');
 const { generateToken } = require('../config/jwtUtils');
 const crypto = require('crypto');
 
+const corsHeaders = {
+    'Access-Control-Allow-Origin': 'https://inventory-mangement-tau-eight.vercel.app',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Credentials': 'true'
+};
+
 const registerTenant = async (req, res, next) => {
+    // Handle preflight request
+    if (req.method === 'OPTIONS') {
+        return res.status(204).set(corsHeaders).send();
+    }
+
     try {
         const { businessName, fullName, email, password } = req.body;
 
@@ -12,7 +24,7 @@ const registerTenant = async (req, res, next) => {
             return res.status(400).json({
                 success: false,
                 error: 'Email already registered'
-            });
+            }).set(corsHeaders);
         }
 
         const subdomain = `${businessName.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${crypto.randomBytes(3).toString('hex')}`;
@@ -44,7 +56,7 @@ const registerTenant = async (req, res, next) => {
             maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
         });
 
-        res.status(201).json({
+        res.status(201).set(corsHeaders).json({
             success: true,
             user: {
                 id: user._id,
@@ -64,13 +76,18 @@ const registerTenant = async (req, res, next) => {
 };
 
 const login = async (req, res, next) => {
+    // Handle preflight request
+    if (req.method === 'OPTIONS') {
+        return res.status(204).set(corsHeaders).send();
+    }
+
     try {
         const { email, password } = req.body;
 
         const user = await User.findOne({ email }).select('+password');
 
         if (!user) {
-            return res.status(401).json({
+            return res.status(401).set(corsHeaders).json({
                 success: false,
                 error: 'Invalid credentials'
             });
@@ -79,7 +96,7 @@ const login = async (req, res, next) => {
         const isMatch = await user.comparePassword(password);
 
         if (!isMatch) {
-            return res.status(401).json({
+            return res.status(401).set(corsHeaders).json({
                 success: false,
                 error: 'Invalid credentials'
             });
@@ -88,7 +105,7 @@ const login = async (req, res, next) => {
         const tenant = await Tenant.findById(user.tenantId);
 
         if (!tenant || !tenant.isActive) {
-            return res.status(403).json({
+            return res.status(403).set(corsHeaders).json({
                 success: false,
                 error: 'Tenant account is inactive'
             });
@@ -108,7 +125,7 @@ const login = async (req, res, next) => {
             maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
         });
 
-        res.json({
+        res.set(corsHeaders).json({
             success: true,
             user: {
                 id: user._id,
@@ -127,11 +144,15 @@ const login = async (req, res, next) => {
     }
 };
 
+// Apply same pattern to other functions
 const getMe = async (req, res, next) => {
+    if (req.method === 'OPTIONS') {
+        return res.status(204).set(corsHeaders).send();
+    }
+    
     try {
         const user = await User.findById(req.userId).populate('tenantId');
-
-        res.json({
+        res.set(corsHeaders).json({
             success: true,
             user: {
                 id: user._id,
@@ -151,12 +172,14 @@ const getMe = async (req, res, next) => {
 };
 
 const logout = (req, res) => {
+    if (req.method === 'OPTIONS') {
+        return res.status(204).set(corsHeaders).send();
+    }
+    
     res.cookie('token', '', {
         httpOnly: true,
         expires: new Date(0)
-    });
-
-    res.json({
+    }).set(corsHeaders).json({
         success: true,
         message: 'Logged out successfully'
     });
