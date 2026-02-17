@@ -14,7 +14,7 @@ const app = express();
 const allowedOrigins = [
     'http://localhost:3000',
     'http://localhost:5173',
-    process.env.CLIENT_URL
+    process.env.CLIENT_URL || 'https://inventory-mangement-tau-eight.vercel.app'
 ].filter(Boolean);
 
 app.use(cors({
