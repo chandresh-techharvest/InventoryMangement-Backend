@@ -10,9 +10,6 @@ const errorHandler = require('./middleware/errorMiddleware');
 
 const app = express();
 
-// Connect to database
-connectDB().catch(err => console.error('DB connection failed:', err));
-
 // CORS configuration - allow multiple origins
 const allowedOrigins = [
     'http://localhost:3000',
@@ -32,7 +29,7 @@ app.use(cors({
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
 app.use(cookieParser());
@@ -58,12 +55,21 @@ app.use('/api/categories', categoryRoutes);
 
 app.use(errorHandler);
 
-// For Vercel serverless
-if (process.env.VERCEL) {
-    module.exports = app;
-} else {
-    const PORT = process.env.PORT || 5000;
-    app.listen(PORT, () => {
-        console.log(`Server running on port ${PORT}`);
+// Constants
+const PORT = process.env.PORT || 5000;
+
+// Export app for serverless use
+module.exports = app;
+
+// Start server only if run directly (not imported)
+if (require.main === module) {
+    // Connect to database only when running locally or on traditional server
+    connectDB().then(() => {
+        app.listen(PORT, () => {
+            console.log(`Server running on port ${PORT}`);
+        });
+    }).catch(err => {
+        console.error('Database connection failed:', err);
+        process.exit(1);
     });
 }
