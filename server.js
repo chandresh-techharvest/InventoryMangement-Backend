@@ -2,7 +2,6 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
-const connectDB = require('./config/db');
 const authRoutes = require('./routes/auth');
 const productRoutes = require('./routes/products');
 const categoryRoutes = require('./routes/categories');
@@ -14,7 +13,8 @@ const app = express();
 const allowedOrigins = [
     'http://localhost:3000',
     'http://localhost:5173',
-    process.env.CLIENT_URL || 'https://inventory-mangement-tau-eight.vercel.app'
+    'https://inventory-mangement-tau-eight.vercel.app',
+    process.env.CLIENT_URL
 ].filter(Boolean);
 
 app.use(cors({
@@ -28,9 +28,15 @@ app.use(cors({
         }
     },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    exposedHeaders: ['Set-Cookie'],
+    preflightContinue: false,
+    optionsSuccessStatus: 204
 }));
+
+// Handle preflight requests explicitly
+app.options('*', cors());
 
 app.use(cookieParser());
 app.use(express.json());
@@ -64,6 +70,7 @@ module.exports = app;
 // Start server only if run directly (not imported)
 if (require.main === module) {
     // Connect to database only when running locally or on traditional server
+    const connectDB = require('./config/db');
     connectDB().then(() => {
         app.listen(PORT, () => {
             console.log(`Server running on port ${PORT}`);
