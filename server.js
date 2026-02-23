@@ -5,6 +5,8 @@ const cookieParser = require('cookie-parser');
 const authRoutes = require('./routes/auth');
 const productRoutes = require('./routes/products');
 const categoryRoutes = require('./routes/categories');
+const warehouseRoutes = require('./routes/warehouses');
+// const inventoryRoutes = require('./routes/inventory');
 const errorHandler = require('./middleware/errorMiddleware');
 
 const app = express();
@@ -50,7 +52,9 @@ app.get('/', (req, res) => {
         endpoints: {
             auth: '/api/tenant',
             products: '/api/products',
-            categories: '/api/categories'
+            categories: '/api/categories',
+            warehouses: '/api/warehouses',
+            inventory: '/api/inventory'
         }
     });
 });
@@ -58,6 +62,8 @@ app.get('/', (req, res) => {
 app.use('/api/tenant', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/categories', categoryRoutes);
+app.use('/api/warehouses', warehouseRoutes);
+// app.use('/api/inventory', inventoryRoutes);
 
 app.use(errorHandler);
 
