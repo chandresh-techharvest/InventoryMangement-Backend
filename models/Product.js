@@ -34,11 +34,19 @@ const productSchema = new mongoose.Schema({
         trim: true
     },
 
+    parentCategoryId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "ParentCategory",
+        required: true,
+        index: true
+    },
+
     // Category
     categoryId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Category',
-        required: [true, 'Category is required']
+        required: [true, 'Category is required'],
+        index: true
     },
 
     brand: {
