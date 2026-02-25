@@ -6,6 +6,7 @@ const connectDB = require('./config/db');
 const authRoutes = require('./routes/auth');
 const productRoutes = require('./routes/products');
 const categoryRoutes = require('./routes/categories');
+const parentCategoryRoutes = require('./routes/parentCategories');
 const errorHandler = require('./middleware/errorMiddleware');
 require('dotenv').config();
 
@@ -40,6 +41,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/tenant', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/categories', categoryRoutes);
+app.use('/api/parent-categories', parentCategoryRoutes);
 
 app.use(errorHandler);
 
