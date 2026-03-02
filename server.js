@@ -6,7 +6,7 @@ const authRoutes = require('./routes/auth');
 const productRoutes = require('./routes/products');
 const categoryRoutes = require('./routes/categories');
 const warehouseRoutes = require('./routes/warehouses');
-// const inventoryRoutes = require('./routes/inventory');
+const inventoryRoutes = require('./routes/inventory');
 const errorHandler = require('./middleware/errorMiddleware');
 
 const app = express();
@@ -63,7 +63,7 @@ app.use('/api/tenant', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/warehouses', warehouseRoutes);
-// app.use('/api/inventory', inventoryRoutes);
+app.use('/api/inventory', inventoryRoutes);
 
 app.use(errorHandler);
 
