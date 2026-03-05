@@ -7,6 +7,9 @@ const productRoutes = require('./routes/products');
 const categoryRoutes = require('./routes/categories');
 const warehouseRoutes = require('./routes/warehouses');
 const inventoryRoutes = require('./routes/inventory');
+const supplierRoutes = require('./routes/suppliers');
+const purchaseOrderRoutes = require('./routes/purchaseOrders');
+const grnRoutes = require('./routes/grn');
 const errorHandler = require('./middleware/errorMiddleware');
 
 const app = express();
@@ -54,7 +57,10 @@ app.get('/', (req, res) => {
             products: '/api/products',
             categories: '/api/categories',
             warehouses: '/api/warehouses',
-            inventory: '/api/inventory'
+            inventory: '/api/inventory',
+            suppliers: '/api/suppliers',
+            purchaseOrders: '/api/purchase-orders',
+            grn: '/api/grn'
         }
     });
 });
@@ -64,6 +70,9 @@ app.use('/api/products', productRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/warehouses', warehouseRoutes);
 app.use('/api/inventory', inventoryRoutes);
+app.use('/api/suppliers', supplierRoutes);
+app.use('/api/purchase-orders', purchaseOrderRoutes);
+app.use('/api/grn', grnRoutes);
 
 app.use(errorHandler);
 
