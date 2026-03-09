@@ -1,32 +1,34 @@
 const Inventory = require('../models/Inventory');
 const Product = require('../models/Product');
 const Warehouse = require('../models/Warehouse');
+const StockMovement = require('../models/StockMovement');
 const { addStockSchema, updateStockSchema } = require('../validators/inventoryValidator');
 
 const addStock = async (req, res, next) => {
     try {
         const data = addStockSchema.parse(req.body);
-        const { warehouseId, productId, variantId, quantity, reorderLevel, batchNumber, expiryDate } = data;
+        const { warehouseId, productId, variantId, quantity, reorderLevel, safetyStock, batchNumber, expiryDate } = data;
 
-        // Validate warehouse belongs to tenant
         const warehouse = await Warehouse.findOne({ _id: warehouseId, tenantId: req.tenantId });
         if (!warehouse) {
             return res.status(404).json({ success: false, error: 'Warehouse not found' });
         }
 
-        // Validate product belongs to tenant
         const product = await Product.findOne({ _id: productId, tenantId: req.tenantId });
         if (!product) {
             return res.status(404).json({ success: false, error: 'Product not found' });
         }
 
-        // Validate variant exists on product
         const variant = product.variants.id(variantId);
         if (!variant) {
             return res.status(404).json({ success: false, error: 'Variant not found on this product' });
         }
 
-        // Upsert: update if exists, create if not
+        // Build batch push if provided
+        const batchUpdate = (batchNumber && quantity > 0)
+            ? { $push: { batches: { batchNumber, expiryDate, quantity } } }
+            : {};
+
         const inventory = await Inventory.findOneAndUpdate(
             { tenantId: req.tenantId, warehouseId, productId, variantId },
             {
@@ -36,13 +38,27 @@ const addStock = async (req, res, next) => {
                     productId,
                     variantId,
                     reorderLevel: reorderLevel ?? 0,
-                    ...(batchNumber && { batchNumber }),
-                    ...(expiryDate && { expiryDate })
+                    safetyStock: safetyStock ?? 0
                 },
-                $inc: { quantity }
+                $inc: { quantityOnHand: quantity },
+                ...batchUpdate
             },
             { new: true, upsert: true, runValidators: true }
         );
+
+        // Log stock movement (MANUAL adjustment)
+        await StockMovement.create({
+            tenantId: req.tenantId,
+            productId,
+            variantId,
+            warehouseId,
+            movementType: 'IN',
+            referenceType: 'MANUAL',
+            referenceId: inventory._id,
+            quantity,
+            createdBy: req.userId,
+            notes: 'Manual stock addition'
+        });
 
         res.status(201).json({ success: true, data: inventory });
     } catch (error) {
@@ -63,7 +79,6 @@ const getInventory = async (req, res, next) => {
             .populate('productId', 'name sku')
             .sort({ createdAt: -1 });
 
-        // Filter low stock via virtual
         if (lowStock === 'true') {
             inventory = inventory.filter(item => item.isLowStock);
         }
@@ -115,7 +130,6 @@ const updateStock = async (req, res, next) => {
 
 const getLowStock = async (req, res, next) => {
     try {
-        // Get all records where reorderLevel is set (> 0), populated
         const allInventory = await Inventory.find({
             tenantId: req.tenantId,
             reorderLevel: { $gt: 0 }
@@ -123,9 +137,7 @@ const getLowStock = async (req, res, next) => {
             .populate('warehouseId', 'name code')
             .populate('productId', 'name sku');
 
-        // Filter via virtual
         const lowStockItems = allInventory.filter(item => item.isLowStock);
-
         res.json({ success: true, count: lowStockItems.length, data: lowStockItems });
     } catch (error) {
         next(error);
@@ -136,7 +148,6 @@ const getTotalStock = async (req, res, next) => {
     try {
         const { productId } = req.params;
 
-        // Validate product belongs to tenant
         const product = await Product.findOne({ _id: productId, tenantId: req.tenantId });
         if (!product) {
             return res.status(404).json({ success: false, error: 'Product not found' });
@@ -147,18 +158,19 @@ const getTotalStock = async (req, res, next) => {
             productId
         }).populate('warehouseId', 'name code');
 
-        // Aggregate totals
-        const totalQuantity = inventoryRecords.reduce((sum, r) => sum + r.quantity, 0);
+        const totalQuantity = inventoryRecords.reduce((sum, r) => sum + r.quantityOnHand, 0);
         const totalAvailable = inventoryRecords.reduce((sum, r) => sum + r.availableQuantity, 0);
-        const totalReserved = inventoryRecords.reduce((sum, r) => sum + r.reservedQuantity, 0);
+        const totalReserved = inventoryRecords.reduce((sum, r) => sum + r.quantityReserved, 0);
 
         const breakdown = inventoryRecords.map(r => ({
             warehouse: r.warehouseId,
             variantId: r.variantId,
-            quantity: r.quantity,
+            quantityOnHand: r.quantityOnHand,
             availableQuantity: r.availableQuantity,
-            reservedQuantity: r.reservedQuantity,
-            isLowStock: r.isLowStock
+            quantityReserved: r.quantityReserved,
+            safetyStock: r.safetyStock,
+            isLowStock: r.isLowStock,
+            batches: r.batches
         }));
 
         res.json({
@@ -176,4 +188,26 @@ const getTotalStock = async (req, res, next) => {
     }
 };
 
-module.exports = { addStock, getInventory, getInventoryById, updateStock, getLowStock, getTotalStock };
+const getStockMovements = async (req, res, next) => {
+    try {
+        const { productId, warehouseId, movementType } = req.query;
+        const query = { tenantId: req.tenantId };
+
+        if (productId) query.productId = productId;
+        if (warehouseId) query.warehouseId = warehouseId;
+        if (movementType) query.movementType = movementType;
+
+        const movements = await StockMovement.find(query)
+            .populate('productId', 'name sku')
+            .populate('warehouseId', 'name code')
+            .populate('createdBy', 'fullName email')
+            .sort({ date: -1 })
+            .limit(100);
+
+        res.json({ success: true, count: movements.length, data: movements });
+    } catch (error) {
+        next(error);
+    }
+};
+
+module.exports = { addStock, getInventory, getInventoryById, updateStock, getLowStock, getTotalStock, getStockMovements };

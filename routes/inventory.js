@@ -7,7 +7,8 @@ const {
     getInventoryById,
     updateStock,
     getLowStock,
-    getTotalStock
+    getTotalStock,
+    getStockMovements
 } = require('../controllers/inventoryController');
 
 router.use(protect);
@@ -18,6 +19,7 @@ router.route('/')
 
 router.get('/low-stock', getLowStock);
 router.get('/total/:productId', getTotalStock);
+router.get('/movements', getStockMovements);
 
 router.route('/:id')
     .get(getInventoryById)

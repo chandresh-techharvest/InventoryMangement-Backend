@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const grnItemSchema = new mongoose.Schema(
+const soItemSchema = new mongoose.Schema(
     {
         productId: {
             type: mongoose.Schema.Types.ObjectId,
@@ -11,51 +11,42 @@ const grnItemSchema = new mongoose.Schema(
             type: mongoose.Schema.Types.ObjectId,
             required: true
         },
-        orderedQuantity: {
+        quantity: {
             type: Number,
             required: true,
-            min: 0
-        },
-        receivedQuantity: {
-            type: Number,
-            required: true,
-            min: 0
+            min: 1
         },
         unitPrice: {
             type: Number,
             required: true,
             min: 0
         },
-        batchNumber: {
-            type: String,
-            trim: true
+        tax: {
+            type: Number,
+            min: 0,
+            default: 0
         },
-        expiryDate: {
-            type: Date
+        totalPrice: {
+            type: Number
         }
     },
     { _id: true }
 );
 
-const grnSchema = new mongoose.Schema(
+const salesOrderSchema = new mongoose.Schema(
     {
         tenantId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'Tenant',
             required: true
         },
-        grnNumber: {
+        orderNumber: {
             type: String,
             required: true
         },
-        purchaseOrderId: {
+        customerId: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: 'PurchaseOrder',
-            required: true
-        },
-        supplierId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'Supplier',
+            ref: 'Customer',
             required: true
         },
         warehouseId: {
@@ -64,13 +55,30 @@ const grnSchema = new mongoose.Schema(
             required: true
         },
         items: {
-            type: [grnItemSchema],
+            type: [soItemSchema],
             validate: {
                 validator: (v) => v.length > 0,
-                message: 'GRN must have at least one item'
+                message: 'Sales order must have at least one item'
             }
         },
-        receivedDate: {
+        subtotal: {
+            type: Number,
+            default: 0
+        },
+        taxAmount: {
+            type: Number,
+            default: 0
+        },
+        totalAmount: {
+            type: Number,
+            default: 0
+        },
+        status: {
+            type: String,
+            enum: ['pending', 'confirmed', 'fulfilled', 'cancelled'],
+            default: 'pending'
+        },
+        orderDate: {
             type: Date,
             default: Date.now
         },
@@ -78,21 +86,16 @@ const grnSchema = new mongoose.Schema(
             type: String,
             trim: true
         },
-        receivedBy: {
+        createdBy: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'User',
             required: true
-        },
-        status: {
-            type: String,
-            enum: ['completed'],
-            default: 'completed'
         }
     },
     { timestamps: true }
 );
 
-// Unique GRN number per tenant
-grnSchema.index({ tenantId: 1, grnNumber: 1 }, { unique: true });
+// Unique SO number per tenant
+salesOrderSchema.index({ tenantId: 1, orderNumber: 1 }, { unique: true });
 
-module.exports = mongoose.model('GRN', grnSchema);
+module.exports = mongoose.model('SalesOrder', salesOrderSchema);

@@ -5,7 +5,9 @@ const grnItemSchema = z.object({
     variantId: z.string().min(1, 'Variant ID is required'),
     orderedQuantity: z.number().min(0),
     receivedQuantity: z.number({ required_error: 'Received quantity is required' }).min(0),
-    unitPrice: z.number().min(0)
+    unitPrice: z.number().min(0),
+    batchNumber: z.string().trim().optional(),
+    expiryDate: z.string().optional()
 });
 
 const createGRNSchema = z.object({

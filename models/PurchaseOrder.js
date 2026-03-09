@@ -21,6 +21,11 @@ const poItemSchema = new mongoose.Schema(
             required: true,
             min: 0
         },
+        tax: {
+            type: Number,
+            min: 0,
+            default: 0
+        },
         totalPrice: {
             type: Number
         }
@@ -89,6 +94,11 @@ const purchaseOrderSchema = new mongoose.Schema(
         notes: {
             type: String,
             trim: true
+        },
+        createdBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User',
+            required: true
         }
     },
     { timestamps: true }

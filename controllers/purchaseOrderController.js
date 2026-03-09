@@ -62,7 +62,8 @@ const createPurchaseOrder = async (req, res, next) => {
             taxAmount,
             totalAmount,
             expectedDeliveryDate: data.expectedDeliveryDate,
-            notes: data.notes
+            notes: data.notes,
+            createdBy: req.userId
         });
 
         res.status(201).json({ success: true, data: po });

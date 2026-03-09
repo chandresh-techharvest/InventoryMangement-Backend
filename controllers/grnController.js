@@ -1,9 +1,9 @@
 const GRN = require('../models/GRN');
 const PurchaseOrder = require('../models/PurchaseOrder');
 const Inventory = require('../models/Inventory');
+const StockMovement = require('../models/StockMovement');
 const { createGRNSchema } = require('../validators/grnValidator');
 
-// Helper: generate GRN number e.g. GRN-2025-001
 const generateGRNNumber = async (tenantId) => {
     const year = new Date().getFullYear();
     const count = await GRN.countDocuments({ tenantId });
@@ -15,7 +15,6 @@ const createGRN = async (req, res, next) => {
     try {
         const data = createGRNSchema.parse(req.body);
 
-        // Validate PO exists and belongs to tenant
         const po = await PurchaseOrder.findOne({
             _id: data.purchaseOrderId,
             tenantId: req.tenantId
@@ -24,7 +23,6 @@ const createGRN = async (req, res, next) => {
             return res.status(404).json({ success: false, error: 'Purchase order not found' });
         }
 
-        // PO must be confirmed to receive goods
         if (po.status === 'draft' || po.status === 'cancelled') {
             return res.status(400).json({
                 success: false,
@@ -40,7 +38,6 @@ const createGRN = async (req, res, next) => {
 
         const grnNumber = await generateGRNNumber(req.tenantId);
 
-        // Create the GRN
         const grn = await GRN.create({
             tenantId: req.tenantId,
             grnNumber,
@@ -49,12 +46,18 @@ const createGRN = async (req, res, next) => {
             warehouseId: po.warehouseId,
             items: data.items,
             receivedDate: data.receivedDate || new Date(),
-            notes: data.notes
+            notes: data.notes,
+            receivedBy: req.userId
         });
 
-        // ✅ Auto-update inventory for each received item
+        // ✅ Auto-update inventory + log stock movements for each item
         for (const item of data.items) {
             if (item.receivedQuantity > 0) {
+                // Build batch update if batch info provided
+                const batchUpdate = (item.batchNumber)
+                    ? { $push: { batches: { batchNumber: item.batchNumber, expiryDate: item.expiryDate, quantity: item.receivedQuantity } } }
+                    : {};
+
                 await Inventory.findOneAndUpdate(
                     {
                         tenantId: req.tenantId,
@@ -63,30 +66,43 @@ const createGRN = async (req, res, next) => {
                         variantId: item.variantId
                     },
                     {
-                        $inc: { quantity: item.receivedQuantity },
+                        $inc: { quantityOnHand: item.receivedQuantity },
                         $setOnInsert: {
                             tenantId: req.tenantId,
                             warehouseId: po.warehouseId,
                             productId: item.productId,
                             variantId: item.variantId,
-                            reservedQuantity: 0,
-                            reorderLevel: 0
-                        }
+                            quantityReserved: 0,
+                            reorderLevel: 0,
+                            safetyStock: 0
+                        },
+                        ...batchUpdate
                     },
                     { upsert: true, new: true }
                 );
+
+                // ✅ Log stock movement
+                await StockMovement.create({
+                    tenantId: req.tenantId,
+                    productId: item.productId,
+                    variantId: item.variantId,
+                    warehouseId: po.warehouseId,
+                    movementType: 'IN',
+                    referenceType: 'GRN',
+                    referenceId: grn._id,
+                    quantity: item.receivedQuantity,
+                    date: data.receivedDate || new Date(),
+                    createdBy: req.userId,
+                    notes: `GRN: ${grnNumber}`
+                });
             }
         }
 
-        // Update PO status based on received quantities
+        // Update PO status
         const totalOrdered = po.items.reduce((sum, i) => sum + i.quantity, 0);
         const totalReceived = data.items.reduce((sum, i) => sum + i.receivedQuantity, 0);
 
-        if (totalReceived >= totalOrdered) {
-            po.status = 'completed';
-        } else {
-            po.status = 'partially_received';
-        }
+        po.status = totalReceived >= totalOrdered ? 'completed' : 'partially_received';
         await po.save();
 
         res.status(201).json({
@@ -111,6 +127,7 @@ const getGRNs = async (req, res, next) => {
             .populate('supplierId', 'name code')
             .populate('warehouseId', 'name code')
             .populate('purchaseOrderId', 'poNumber status')
+            .populate('receivedBy', 'fullName')
             .sort({ createdAt: -1 });
 
         res.json({ success: true, count: grns.length, data: grns });
@@ -127,7 +144,8 @@ const getGRN = async (req, res, next) => {
         })
             .populate('supplierId', 'name code contactPerson')
             .populate('warehouseId', 'name code address')
-            .populate('purchaseOrderId', 'poNumber totalAmount');
+            .populate('purchaseOrderId', 'poNumber totalAmount')
+            .populate('receivedBy', 'fullName email');
 
         if (!grn) {
             return res.status(404).json({ success: false, error: 'GRN not found' });
