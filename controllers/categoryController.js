@@ -1,77 +1,89 @@
 const Category = require('../models/Category');
 const Product = require('../models/Product');
+const ParentCategory = require('../models/ParentCategory');
 
+// CREATE CATEGORY (subcategory)
 exports.createCategory = async (req, res, next) => {
-    try {
-        const { parentCategoryId, ...categoryData } = req.body;
+  try {
+    const { name, description, parentCategoryId, isActive } = req.body;
 
-        // If parent category specified, verify it exists and belongs to tenant
-        if (parentCategoryId) {
-            const parentCategory = await Category.findOne({
-                _id: parentCategoryId,
-                tenantId: req.tenantId
-            });
-
-            if (!parentCategory) {
-                return res.status(404).json({
-                    success: false,
-                    error: 'Parent category not found'
-                });
-            }
-        }
-
-        // Create category
-        const category = await Category.create({
-            ...categoryData,
-            parentCategoryId: parentCategoryId || null,
-            tenantId: req.tenantId
-        });
-
-        res.status(201).json({
-            success: true,
-            data: category
-        });
-    } catch (error) {
-        // Handle duplicate category name
-        if (error.code === 11000) {
-            return res.status(400).json({
-                success: false,
-                error: 'Category name already exists at this level'
-            });
-        }
-        next(error);
+    // ✅ parentCategoryId REQUIRED now
+    if (!parentCategoryId) {
+      return res.status(400).json({
+        success: false,
+        error: "Parent category is required"
+      });
     }
+
+    // ✅ Verify parent exists in ParentCategory collection
+    const parent = await ParentCategory.findOne({
+      _id: parentCategoryId,
+      tenantId: req.user.tenantId
+    });
+
+    if (!parent) {
+      return res.status(404).json({
+        success: false,
+        error: "Parent category not found"
+      });
+    }
+
+    // ✅ Create subcategory
+    const category = await Category.create({
+      tenantId: req.user.tenantId,
+      name,
+      description,
+      parentCategoryId,
+      isActive: isActive ?? true
+    });
+
+    res.status(201).json({
+      success: true,
+      data: category
+    });
+
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        error: "Category already exists under this parent"
+      });
+    }
+    next(error);
+  }
 };
 
 exports.getCategories = async (req, res, next) => {
-    try {
-        const { parentCategoryId, isActive } = req.query;
+  try {
+    const { parentCategoryId, isActive } = req.query;
 
-        // Build query
-        const query = { tenantId: req.tenantId };
+    const query = {
+      tenantId: req.user.tenantId,
+      parentCategoryId: { $ne: null }   // ✅ exclude old parent records
+    };
 
-        if (parentCategoryId === 'null' || parentCategoryId === '') {
-            query.parentCategoryId = null;
-        } else if (parentCategoryId) {
-            query.parentCategoryId = parentCategoryId;
-        }
-
-        if (isActive !== undefined) {
-            query.isActive = isActive === 'true';
-        }
-
-        const categories = await Category.find(query)
-            .populate('parentCategoryId', 'name')
-            .sort({ name: 1 });
-
-        res.json({
-            success: true,
-            count: categories.length,
-            data: categories
-        });
-    } catch (error) {
-        next(error);
+    // filter by specific parent
+    if (parentCategoryId && parentCategoryId !== "not-null") {
+      query.parentCategoryId = parentCategoryId;
     }
+
+    if (isActive !== undefined) {
+      query.isActive = isActive === "true";
+    }
+
+    const categories = await Category.find(query)
+      .populate("parentCategoryId", "name")
+      .sort({ name: 1 });
+
+    res.json({
+      success: true,
+      count: categories.length,
+      data: categories
+    });
+
+  } catch (error) {
+    next(error);
+  }
 };
 
 exports.getCategoryTree = async (req, res, next) => {
@@ -111,32 +123,27 @@ exports.getCategoryTree = async (req, res, next) => {
 };
 
 exports.getCategory = async (req, res, next) => {
-    try {
-        const category = await Category.findOne({
-            _id: req.params.id,
-            tenantId: req.tenantId
-        }).populate('parentCategoryId', 'name');
+  try {
+    const category = await Category.findOne({
+      _id: req.params.id,
+      tenantId: req.tenantId
+    }).populate("parentCategoryId", "name");
 
-        if (!category) {
-            return res.status(404).json({
-                success: false,
-                error: 'Category not found'
-            });
-        }
-
-        // Get subcategories
-        const subcategories = await category.getSubcategories();
-
-        res.json({
-            success: true,
-            data: {
-                ...category.toObject(),
-                subcategories
-            }
-        });
-    } catch (error) {
-        next(error);
+    if (!category) {
+      return res.status(404).json({
+        success: false,
+        error: "Category not found"
+      });
     }
+
+    res.json({
+      success: true,
+      data: category
+    });
+  } catch (err) {
+    console.error("GET CATEGORY ERROR:", err);
+    next(err);
+  }
 };
 
 exports.updateCategory = async (req, res, next) => {

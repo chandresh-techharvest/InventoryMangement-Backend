@@ -12,6 +12,7 @@ const purchaseOrderRoutes = require('./routes/purchaseOrders');
 const grnRoutes = require('./routes/grn');
 const customerRoutes = require('./routes/customers');
 const salesOrderRoutes = require('./routes/salesOrders');
+const parentCategoryRoutes = require('./routes/parentCategories');
 const errorHandler = require('./middleware/errorMiddleware');
 
 const app = express();
@@ -79,6 +80,7 @@ app.use('/api/purchase-orders', purchaseOrderRoutes);
 app.use('/api/grn', grnRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/sales-orders', salesOrderRoutes);
+app.use('/api/parent-categories', parentCategoryRoutes);
 
 app.use(errorHandler);
 
