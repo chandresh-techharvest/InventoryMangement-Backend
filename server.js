@@ -13,6 +13,7 @@ const grnRoutes = require('./routes/grn');
 const customerRoutes = require('./routes/customers');
 const salesOrderRoutes = require('./routes/salesOrders');
 const parentCategoryRoutes = require('./routes/parentCategories');
+const posRoutes = require('./routes/pos');
 const errorHandler = require('./middleware/errorMiddleware');
 
 const app = express();
@@ -65,7 +66,8 @@ app.get('/', (req, res) => {
             purchaseOrders: '/api/purchase-orders',
             grn: '/api/grn',
             customers: '/api/customers',
-            salesOrders: '/api/sales-orders'
+            salesOrders: '/api/sales-orders',
+            pos: '/api/pos'
         }
     });
 });
@@ -81,6 +83,7 @@ app.use('/api/grn', grnRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/sales-orders', salesOrderRoutes);
 app.use('/api/parent-categories', parentCategoryRoutes);
+app.use('/api/pos', posRoutes);
 
 app.use(errorHandler);
 
