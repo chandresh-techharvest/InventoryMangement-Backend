@@ -2,28 +2,25 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
-const connectDB = require('./config/db');
 const authRoutes = require('./routes/auth');
 const productRoutes = require('./routes/products');
 const categoryRoutes = require('./routes/categories');
 const parentCategoryRoutes = require('./routes/parentCategories');
+const warehouseRoutes = require('./routes/warehouses');
 const errorHandler = require('./middleware/errorMiddleware');
-require('dotenv').config();
 
 const app = express();
-
-connectDB();
 
 // CORS configuration - allow multiple origins
 const allowedOrigins = [
     'http://localhost:3000',
     'http://localhost:5173',
+    'https://inventory-mangement-tau-eight.vercel.app',
     process.env.CLIENT_URL
 ].filter(Boolean);
 
 app.use(cors({
     origin: function (origin, callback) {
-        // Allow requests with no origin (like mobile apps or curl)
         if (!origin) return callback(null, true);
 
         if (allowedOrigins.indexOf(origin) !== -1) {
@@ -32,21 +29,61 @@ app.use(cors({
             callback(new Error('Not allowed by CORS'));
         }
     },
-    credentials: true
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    exposedHeaders: ['Set-Cookie'],
+    preflightContinue: false,
+    optionsSuccessStatus: 204
 }));
+
+// Handle preflight requests explicitly
+app.options('*', cors());
+
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Health check endpoint
+app.get('/', (req, res) => {
+    res.json({
+        success: true,
+        message: 'POS ERP Backend API',
+        endpoints: {
+            auth: '/api/tenant',
+            products: '/api/products',
+            categories: '/api/categories',
+            warehouses: '/api/warehouses',
+            inventory: '/api/inventory'
+        }
+    });
+});
 
 app.use('/api/tenant', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/parent-categories', parentCategoryRoutes);
+app.use('/api/warehouses', warehouseRoutes);
+// app.use('/api/inventory', inventoryRoutes);
 
 app.use(errorHandler);
 
+// Constants
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+// Export app for serverless use
+module.exports = app;
+
+// Start server only if run directly (not imported)
+if (require.main === module) {
+    // Connect to database only when running locally or on traditional server
+    const connectDB = require('./config/db');
+    connectDB().then(() => {
+        app.listen(PORT, () => {
+            console.log(`Server running on port ${PORT}`);
+        });
+    }).catch(err => {
+        console.error('Database connection failed:', err);
+        process.exit(1);
+    });
+}
