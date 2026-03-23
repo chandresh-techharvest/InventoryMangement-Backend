@@ -5,8 +5,15 @@ const cookieParser = require('cookie-parser');
 const authRoutes = require('./routes/auth');
 const productRoutes = require('./routes/products');
 const categoryRoutes = require('./routes/categories');
-const parentCategoryRoutes = require('./routes/parentCategories');
 const warehouseRoutes = require('./routes/warehouses');
+const inventoryRoutes = require('./routes/inventory');
+const supplierRoutes = require('./routes/suppliers');
+const purchaseOrderRoutes = require('./routes/purchaseOrders');
+const grnRoutes = require('./routes/grn');
+const customerRoutes = require('./routes/customers');
+const salesOrderRoutes = require('./routes/salesOrders');
+const parentCategoryRoutes = require('./routes/parentCategories');
+const posRoutes = require('./routes/pos');
 const errorHandler = require('./middleware/errorMiddleware');
 
 const app = express();
@@ -54,7 +61,13 @@ app.get('/', (req, res) => {
             products: '/api/products',
             categories: '/api/categories',
             warehouses: '/api/warehouses',
-            inventory: '/api/inventory'
+            inventory: '/api/inventory',
+            suppliers: '/api/suppliers',
+            purchaseOrders: '/api/purchase-orders',
+            grn: '/api/grn',
+            customers: '/api/customers',
+            salesOrders: '/api/sales-orders',
+            pos: '/api/pos'
         }
     });
 });
@@ -62,9 +75,15 @@ app.get('/', (req, res) => {
 app.use('/api/tenant', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/categories', categoryRoutes);
-app.use('/api/parent-categories', parentCategoryRoutes);
 app.use('/api/warehouses', warehouseRoutes);
-// app.use('/api/inventory', inventoryRoutes);
+app.use('/api/inventory', inventoryRoutes);
+app.use('/api/suppliers', supplierRoutes);
+app.use('/api/purchase-orders', purchaseOrderRoutes);
+app.use('/api/grn', grnRoutes);
+app.use('/api/customers', customerRoutes);
+app.use('/api/sales-orders', salesOrderRoutes);
+app.use('/api/parent-categories', parentCategoryRoutes);
+app.use('/api/pos', posRoutes);
 
 app.use(errorHandler);
 

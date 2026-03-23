@@ -1,5 +1,5 @@
 const Warehouse = require('../models/Warehouse');
-// const Inventory = require('../models/Inventory');
+const Inventory = require('../models/Inventory');
 const { createWarehouseSchema, updateWarehouseSchema } = require('../validators/warehouseValidator');
 
 const createWarehouse = async (req, res, next) => {
@@ -106,13 +106,13 @@ const deleteWarehouse = async (req, res, next) => {
         }
 
         // Protect: cannot delete if inventory exists
-        // const hasInventory = await Inventory.findOne({ warehouseId: warehouse._id });
-        // if (hasInventory) {
-        //     return res.status(400).json({
-        //         success: false,
-        //         error: 'Cannot delete warehouse with existing inventory. Remove stock first.'
-        //     });
-        // }
+        const hasInventory = await Inventory.findOne({ warehouseId: warehouse._id });
+        if (hasInventory) {
+            return res.status(400).json({
+                success: false,
+                error: 'Cannot delete warehouse with existing inventory. Remove stock first.'
+            });
+        }
 
         await warehouse.deleteOne();
         res.json({ success: true, message: 'Warehouse deleted successfully' });
