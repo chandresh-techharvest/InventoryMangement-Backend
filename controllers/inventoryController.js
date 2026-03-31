@@ -2,7 +2,7 @@ const Inventory = require('../models/Inventory');
 const Product = require('../models/Product');
 const Warehouse = require('../models/Warehouse');
 const StockMovement = require('../models/StockMovement');
-const { addStockSchema, updateStockSchema } = require('../validators/inventoryValidator');
+const { addStockSchema, updateStockSchema, transferStockSchema } = require('../validators/inventoryValidator');
 
 const addStock = async (req, res, next) => {
     try {
@@ -24,7 +24,6 @@ const addStock = async (req, res, next) => {
             return res.status(404).json({ success: false, error: 'Variant not found on this product' });
         }
 
-        // Build batch push if provided
         const batchUpdate = (batchNumber && quantity > 0)
             ? { $push: { batches: { batchNumber, expiryDate, quantity } } }
             : {};
@@ -46,7 +45,6 @@ const addStock = async (req, res, next) => {
             { new: true, upsert: true, runValidators: true }
         );
 
-        // Log stock movement (MANUAL adjustment)
         await StockMovement.create({
             tenantId: req.tenantId,
             productId,
@@ -127,7 +125,6 @@ const updateStock = async (req, res, next) => {
             { new: true, runValidators: true }
         );
 
-        // 🔥 CALCULATE DIFFERENCE
         const diff = updated.quantityOnHand - oldInventory.quantityOnHand;
 
         if (diff !== 0) {
@@ -150,26 +147,6 @@ const updateStock = async (req, res, next) => {
         next(error);
     }
 };
-
-// const updateStock = async (req, res, next) => {
-//     try {
-//         const data = updateStockSchema.parse(req.body);
-
-//         const inventory = await Inventory.findOneAndUpdate(
-//             { _id: req.params.id, tenantId: req.tenantId },
-//             data,
-//             { new: true, runValidators: true }
-//         );
-
-//         if (!inventory) {
-//             return res.status(404).json({ success: false, error: 'Inventory record not found' });
-//         }
-
-//         res.json({ success: true, data: inventory });
-//     } catch (error) {
-//         next(error);
-//     }
-// };
 
 const getLowStock = async (req, res, next) => {
     try {
@@ -243,6 +220,7 @@ const getStockMovements = async (req, res, next) => {
         const movements = await StockMovement.find(query)
             .populate('productId', 'name sku')
             .populate('warehouseId', 'name code')
+            .populate('counterpartyWarehouseId', 'name code')
             .populate('createdBy', 'fullName email')
             .sort({ date: -1 })
             .limit(100);
@@ -255,11 +233,52 @@ const getStockMovements = async (req, res, next) => {
 
 const transferStock = async (req, res, next) => {
     try {
-        const { productId, variantId, fromWarehouse, toWarehouse, quantity } = req.body;
+        const data = transferStockSchema.parse(req.body);
+        const {
+            productId,
+            variantId,
+            fromWarehouse,
+            toWarehouse,
+            quantity,
+            notes
+        } = data;
 
         if (fromWarehouse === toWarehouse) {
-            return res.status(400).json({ error: "Cannot transfer to same warehouse" });
+            return res.status(400).json({ success: false, error: 'Cannot transfer to same warehouse' });
         }
+
+        const [product, sourceWarehouse, destinationWarehouse] = await Promise.all([
+            Product.findOne({ _id: productId, tenantId: req.tenantId }),
+            Warehouse.findOne({ _id: fromWarehouse, tenantId: req.tenantId }),
+            Warehouse.findOne({ _id: toWarehouse, tenantId: req.tenantId })
+        ]);
+
+        if (!product) {
+            return res.status(404).json({ success: false, error: 'Product not found' });
+        }
+
+        const variant = product.variants.id(variantId);
+        if (!variant) {
+            return res.status(404).json({ success: false, error: 'Variant not found on this product' });
+        }
+
+        if (!sourceWarehouse || !destinationWarehouse) {
+            return res.status(404).json({ success: false, error: 'Warehouse not found' });
+        }
+
+        if (!sourceWarehouse.isActive) {
+            return res.status(400).json({ success: false, error: 'Source warehouse is inactive' });
+        }
+
+        if (!destinationWarehouse.isActive) {
+            return res.status(400).json({ success: false, error: 'Destination warehouse is inactive' });
+        }
+
+        const transferGroupId = new Inventory()._id;
+        let sourceInventoryId;
+        let destinationInventoryId;
+        let sourceRemaining = 0;
+        let destinationBalance = 0;
 
         const fromInv = await Inventory.findOne({
             tenantId: req.tenantId,
@@ -268,15 +287,17 @@ const transferStock = async (req, res, next) => {
             warehouseId: fromWarehouse
         });
 
-        if (!fromInv || fromInv.quantityOnHand < quantity) {
-            return res.status(400).json({ error: "Insufficient stock" });
+        if (!fromInv) {
+            return res.status(404).json({ success: false, error: 'Source inventory record not found' });
         }
 
-        // Deduct
+        if (fromInv.availableQuantity < quantity) {
+            return res.status(400).json({ success: false, error: `Only ${fromInv.availableQuantity} units are available in the source warehouse` });
+        }
+
         fromInv.quantityOnHand -= quantity;
         await fromInv.save();
 
-        // Add to destination
         const toInv = await Inventory.findOneAndUpdate(
             {
                 tenantId: req.tenantId,
@@ -285,102 +306,153 @@ const transferStock = async (req, res, next) => {
                 warehouseId: toWarehouse
             },
             {
+                $setOnInsert: {
+                    tenantId: req.tenantId,
+                    warehouseId: toWarehouse,
+                    productId,
+                    variantId,
+                    reorderLevel: 0,
+                    safetyStock: 0,
+                    quantityReserved: 0
+                },
                 $inc: { quantityOnHand: quantity }
             },
-            { new: true, upsert: true }
+            {
+                new: true,
+                upsert: true,
+                runValidators: true
+            }
         );
 
-        // 🔥 Movement logs (DOUBLE ENTRY)
+        sourceInventoryId = fromInv._id;
+        destinationInventoryId = toInv._id;
+        sourceRemaining = fromInv.availableQuantity;
+        destinationBalance = toInv.availableQuantity;
+
+        const auditNote = notes?.trim();
+
         await StockMovement.create([
             {
                 tenantId: req.tenantId,
                 productId,
                 variantId,
                 warehouseId: fromWarehouse,
+                counterpartyWarehouseId: toWarehouse,
                 movementType: 'TRANSFER',
                 referenceType: 'TRANSFER',
                 referenceId: fromInv._id,
+                transferGroupId,
                 quantity: -quantity,
                 createdBy: req.userId,
-                notes: 'Transfer OUT'
+                notes: auditNote || `Transfer out to ${destinationWarehouse.name}`
             },
             {
                 tenantId: req.tenantId,
                 productId,
                 variantId,
                 warehouseId: toWarehouse,
+                counterpartyWarehouseId: fromWarehouse,
                 movementType: 'TRANSFER',
                 referenceType: 'TRANSFER',
                 referenceId: toInv._id,
-                quantity: quantity,
+                transferGroupId,
+                quantity,
                 createdBy: req.userId,
-                notes: 'Transfer IN'
+                notes: auditNote || `Transfer in from ${sourceWarehouse.name}`
             }
         ]);
 
-        res.json({ success: true });
+        res.json({
+            success: true,
+            message: 'Stock transferred successfully',
+            data: {
+                transferGroupId,
+                quantity,
+                notes: notes?.trim() || '',
+                product: {
+                    id: product._id,
+                    name: product.name,
+                    sku: product.sku
+                },
+                variant: {
+                    id: variant._id,
+                    attributes: Object.fromEntries(variant.attributes || [])
+                },
+                sourceWarehouse: {
+                    id: sourceWarehouse._id,
+                    name: sourceWarehouse.name,
+                    inventoryId: sourceInventoryId,
+                    remainingAvailableQuantity: sourceRemaining
+                },
+                destinationWarehouse: {
+                    id: destinationWarehouse._id,
+                    name: destinationWarehouse.name,
+                    inventoryId: destinationInventoryId,
+                    availableQuantity: destinationBalance
+                },
+                transferredAt: new Date()
+            }
+        });
     } catch (error) {
         next(error);
     }
 };
 
 const adjustStock = async (req, res, next) => {
-  try {
-    const {
-      inventoryId,
-      adjustmentType, // IN or OUT
-      quantity,
-      reason
-    } = req.body;
+    try {
+        const {
+            inventoryId,
+            adjustmentType,
+            quantity,
+            reason
+        } = req.body;
 
-    const inventory = await Inventory.findOne({
-      _id: inventoryId,
-      tenantId: req.tenantId
-    });
+        const inventory = await Inventory.findOne({
+            _id: inventoryId,
+            tenantId: req.tenantId
+        });
 
-    if (!inventory) {
-      return res.status(404).json({
-        success: false,
-        error: "Inventory not found"
-      });
+        if (!inventory) {
+            return res.status(404).json({
+                success: false,
+                error: 'Inventory not found'
+            });
+        }
+
+        const change = adjustmentType === 'OUT' ? -quantity : quantity;
+
+        inventory.quantityOnHand += change;
+
+        if (inventory.quantityOnHand < 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Stock cannot be negative'
+            });
+        }
+
+        await inventory.save();
+
+        await StockMovement.create({
+            tenantId: req.tenantId,
+            productId: inventory.productId,
+            variantId: inventory.variantId,
+            warehouseId: inventory.warehouseId,
+            movementType: 'ADJUSTMENT',
+            referenceType: 'MANUAL',
+            referenceId: inventory._id,
+            quantity,
+            createdBy: req.userId,
+            notes: reason || 'Stock adjustment'
+        });
+
+        res.json({
+            success: true,
+            message: 'Stock adjusted successfully',
+            data: inventory
+        });
+    } catch (err) {
+        next(err);
     }
-
-    const change = adjustmentType === "OUT" ? -quantity : quantity;
-
-    inventory.quantityOnHand += change;
-
-    if (inventory.quantityOnHand < 0) {
-      return res.status(400).json({
-        success: false,
-        error: "Stock cannot be negative"
-      });
-    }
-
-    await inventory.save();
-
-    // LOG movement
-    await StockMovement.create({
-      tenantId: req.tenantId,
-      productId: inventory.productId,
-      variantId: inventory.variantId,
-      warehouseId: inventory.warehouseId,
-      movementType: "ADJUSTMENT",
-      referenceType: "MANUAL",
-      referenceId: inventory._id,
-      quantity,
-      createdBy: req.userId,
-      notes: reason || "Stock adjustment"
-    });
-
-    res.json({
-      success: true,
-      message: "Stock adjusted successfully",
-      data: inventory
-    });
-
-  } catch (err) {
-    next(err);
-  }
 };
 
 module.exports = { addStock, getInventory, getInventoryById, updateStock, getLowStock, getTotalStock, getStockMovements, transferStock, adjustStock };
