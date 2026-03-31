@@ -4,7 +4,8 @@ const { generateToken } = require('../config/jwtUtils');
 const crypto = require('crypto');
 
 const corsHeaders = {
-    'Access-Control-Allow-Origin': 'https://inventory-mangement-tau-eight.vercel.app',
+    // 'Access-Control-Allow-Origin': 'http://localhost:3000',
+    'Access-Control-Allow-Origin': 'https://inventory-mangement-backend-theta.vercel.app/',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Credentials': 'true'
