@@ -21,6 +21,10 @@ const stockMovementSchema = new mongoose.Schema(
             ref: 'Warehouse',
             required: true
         },
+        counterpartyWarehouseId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Warehouse'
+        },
         movementType: {
             type: String,
             enum: ['IN', 'OUT', 'TRANSFER', 'ADJUSTMENT'],
@@ -34,6 +38,9 @@ const stockMovementSchema = new mongoose.Schema(
         referenceId: {
             type: mongoose.Schema.Types.ObjectId,
             required: true
+        },
+        transferGroupId: {
+            type: mongoose.Schema.Types.ObjectId
         },
         quantity: {
             type: Number,
@@ -60,5 +67,6 @@ const stockMovementSchema = new mongoose.Schema(
 stockMovementSchema.index({ tenantId: 1, productId: 1, date: -1 });
 stockMovementSchema.index({ tenantId: 1, warehouseId: 1, date: -1 });
 stockMovementSchema.index({ tenantId: 1, referenceType: 1, referenceId: 1 });
+stockMovementSchema.index({ tenantId: 1, transferGroupId: 1, date: -1 });
 
 module.exports = mongoose.model('StockMovement', stockMovementSchema);

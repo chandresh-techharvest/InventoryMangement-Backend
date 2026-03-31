@@ -38,7 +38,7 @@ const getWarehouses = async (req, res, next) => {
             ];
         }
 
-        const warehouses = await Warehouse.find(query).sort({ createdAt: -1 });
+        const warehouses = await Warehouse.find(query).populate('parentCategoryId', 'name').sort({ createdAt: -1 });
         res.json({ success: true, count: warehouses.length, data: warehouses });
     } catch (error) {
         next(error);
@@ -50,7 +50,7 @@ const getWarehouse = async (req, res, next) => {
         const warehouse = await Warehouse.findOne({
             _id: req.params.id,
             tenantId: req.tenantId
-        });
+        }).populate('parentCategoryId', 'name');
 
         if (!warehouse) {
             return res.status(404).json({ success: false, error: 'Warehouse not found' });

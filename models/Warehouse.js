@@ -36,6 +36,11 @@ const warehouseSchema = new mongoose.Schema(
         isActive: {
             type: Boolean,
             default: true
+        },
+        parentCategoryId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'ParentCategory',
+            default: null
         }
     },
     { timestamps: true }

@@ -12,7 +12,8 @@ const createWarehouseSchema = z.object({
     }).optional(),
     contactPerson: z.string().trim().optional(),
     contactPhone: z.string().trim().optional(),
-    isActive: z.boolean().default(true)
+    isActive: z.boolean().default(true),
+    parentCategoryId: z.string().optional().nullable(),
 });
 
 const updateWarehouseSchema = createWarehouseSchema.partial();

@@ -18,4 +18,13 @@ const updateStockSchema = z.object({
     safetyStock: z.number().min(0).optional()
 });
 
-module.exports = { addStockSchema, updateStockSchema };
+const transferStockSchema = z.object({
+    productId: z.string().min(1, 'Product ID is required'),
+    variantId: z.string().min(1, 'Variant ID is required'),
+    fromWarehouse: z.string().min(1, 'Source warehouse is required'),
+    toWarehouse: z.string().min(1, 'Destination warehouse is required'),
+    quantity: z.number({ required_error: 'Quantity is required' }).positive('Quantity must be greater than zero'),
+    notes: z.string().trim().max(500, 'Notes must be under 500 characters').optional().or(z.literal(''))
+});
+
+module.exports = { addStockSchema, updateStockSchema, transferStockSchema };
