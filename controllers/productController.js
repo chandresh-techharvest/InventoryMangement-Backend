@@ -5,59 +5,63 @@ const ParentCategory = require("../models/ParentCategory");
 // ================= CREATE =================
 exports.createProduct = async (req, res, next) => {
   try {
+    if (req.body.supplierId === "") {
+      req.body.supplierId = null;
+    }
+
     const { parentCategoryId, categoryId, ...productData } = req.body;
 
     if (!parentCategoryId) {
       return res.status(400).json({
         success: false,
-        error: "Parent category is required"
+        error: "Parent category is required",
       });
     }
 
     if (!categoryId) {
       return res.status(400).json({
         success: false,
-        error: "Category is required"
+        error: "Category is required",
       });
     }
 
-    // ✅ verify parent exists
+    // verify parent exists
     const parent = await ParentCategory.findOne({
       _id: parentCategoryId,
-      tenantId: req.tenantId
+      tenantId: req.tenantId,
     });
 
     if (!parent) {
       return res.status(404).json({
         success: false,
-        error: "Parent category not found"
+        error: "Parent category not found",
       });
     }
 
-    // ✅ verify category belongs to parent
+    // verify category belongs to parent
     const category = await Category.findOne({
       _id: categoryId,
       tenantId: req.tenantId,
-      parentCategoryId
+      parentCategoryId,
     });
 
     if (!category) {
       return res.status(404).json({
         success: false,
-        error: "Category not under selected parent"
+        error: "Category not under selected parent",
       });
     }
 
     // SKU unique
     const existingProduct = await Product.findOne({
       tenantId: req.tenantId,
-      sku: productData.sku
+      sku: productData.sku,
     });
 
     if (existingProduct) {
       return res.status(400).json({
         success: false,
-        error: "SKU already exists"
+        error: "SKU already exists",
       });
     }
 
@@ -65,12 +69,12 @@ exports.createProduct = async (req, res, next) => {
       ...productData,
       tenantId: req.tenantId,
       parentCategoryId,
-      categoryId
+      categoryId,
     });
 
     res.status(201).json({
       success: true,
-      data: product
+      data: product,
     });
   } catch (error) {
     next(error);
@@ -95,7 +99,7 @@ exports.getProducts = async (req, res, next) => {
       query.$or = [
         { name: { $regex: search, $options: "i" } },
         { sku: { $regex: search, $options: "i" } },
-        { barcode: { $regex: search, $options: "i" } }
+        { barcode: { $regex: search, $options: "i" } },
       ];
     }
 
@@ -110,7 +114,7 @@ exports.getProducts = async (req, res, next) => {
     res.json({
       success: true,
       count: products.length,
-      data: products
+      data: products,
     });
   } catch (error) {
     next(error);
@@ -122,7 +126,7 @@ exports.getProduct = async (req, res, next) => {
   try {
     const product = await Product.findOne({
       _id: req.params.id,
-      tenantId: req.tenantId
+      tenantId: req.tenantId,
     })
       .populate("parentCategoryId", "name")
       .populate("categoryId", "name parentCategoryId");
@@ -130,13 +134,13 @@ exports.getProduct = async (req, res, next) => {
     if (!product) {
       return res.status(404).json({
         success: false,
-        error: "Product not found"
+        error: "Product not found",
       });
     }
 
     res.json({
       success: true,
-      data: product
+      data: product,
     });
   } catch (error) {
     next(error);
@@ -150,28 +154,28 @@ exports.updateProduct = async (req, res, next) => {
 
     let product = await Product.findOne({
       _id: req.params.id,
-      tenantId: req.tenantId
+      tenantId: req.tenantId,
     });
 
     if (!product) {
       return res.status(404).json({
         success: false,
-        error: "Product not found"
+        error: "Product not found",
       });
     }
 
-    // ✅ validate parent+category pair
+    // validate parent+category pair
     if (parentCategoryId && categoryId) {
       const category = await Category.findOne({
         _id: categoryId,
         tenantId: req.tenantId,
-        parentCategoryId
+        parentCategoryId,
       });
 
       if (!category) {
         return res.status(404).json({
           success: false,
-          error: "Category not under parent"
+          error: "Category not under parent",
         });
       }
 
@@ -184,30 +188,29 @@ exports.updateProduct = async (req, res, next) => {
       const existingProduct = await Product.findOne({
         tenantId: req.tenantId,
         sku,
-        _id: { $ne: product._id }
+        _id: { $ne: product._id },
       });
 
       if (existingProduct) {
         return res.status(400).json({
           success: false,
-          error: "SKU already exists"
+          error: "SKU already exists",
         });
       }
 
       updateData.sku = sku;
     }
 
-    product = await Product.findByIdAndUpdate(
-      req.params.id,
-      updateData,
-      { new: true, runValidators: true }
-    )
+    product = await Product.findByIdAndUpdate(req.params.id, updateData, {
+      new: true,
+      runValidators: true,
+    })
       .populate("parentCategoryId", "name")
       .populate("categoryId", "name");
 
     res.json({
       success: true,
-      data: product
+      data: product,
     });
   } catch (error) {
     next(error);
@@ -219,13 +222,13 @@ exports.deleteProduct = async (req, res, next) => {
   try {
     const product = await Product.findOne({
       _id: req.params.id,
-      tenantId: req.tenantId
+      tenantId: req.tenantId,
     });
 
     if (!product) {
       return res.status(404).json({
         success: false,
-        error: "Product not found"
+        error: "Product not found",
       });
     }
 
@@ -233,7 +236,7 @@ exports.deleteProduct = async (req, res, next) => {
 
     res.json({
       success: true,
-      message: "Product deleted successfully"
+      message: "Product deleted successfully",
     });
   } catch (error) {
     next(error);

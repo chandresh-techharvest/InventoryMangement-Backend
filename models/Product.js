@@ -22,6 +22,11 @@ const productSchema = new mongoose.Schema({
         trim: true
     },
 
+    supplierId : {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Supplier',
+    },
+
     // Basic info
     name: {
         type: String,
@@ -58,7 +63,7 @@ const productSchema = new mongoose.Schema({
     uom: {
         type: String,
         required: [true, 'Unit of measure is required'],
-        enum: ['PCS', 'KG', 'L', 'M', 'BOX', 'DOZEN'],
+        enum: ['PCS', 'KG', 'LTR', 'BOX', 'DOZEN'],
         default: 'PCS'
     },
 
